@@ -3,28 +3,79 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const filterCategory = document.getElementById("filter-category");
+  const sortActivities = document.getElementById("sort-activities");
+  const searchActivities = document.getElementById("search-activities");
+
+  let allActivities = {};
+  let categories = new Set();
 
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
       const response = await fetch("/activities");
       const activities = await response.json();
+      allActivities = activities;
+      categories.clear();
+      Object.values(activities).forEach((details) => {
+        if (details.category) categories.add(details.category);
+      });
+      renderCategories();
+      renderActivities();
+    } catch (error) {
+      activitiesList.innerHTML =
+        "<p>Failed to load activities. Please try again later.</p>";
+      console.error("Error fetching activities:", error);
+    }
+  }
 
-      // Clear loading message
-      activitiesList.innerHTML = "";
+  function renderCategories() {
+    if (!filterCategory) return;
+    filterCategory.innerHTML = '<option value="">All</option>';
+    categories.forEach((cat) => {
+      const option = document.createElement("option");
+      option.value = cat;
+      option.textContent = cat;
+      filterCategory.appendChild(option);
+    });
+  }
 
-      // Populate activities list
-      Object.entries(activities).forEach(([name, details]) => {
-        const activityCard = document.createElement("div");
-        activityCard.className = "activity-card";
-
-        const spotsLeft =
-          details.max_participants - details.participants.length;
-
-        // Create participants HTML with delete icons instead of bullet points
-        const participantsHTML =
-          details.participants.length > 0
-            ? `<div class="participants-section">
+  function renderActivities() {
+    let filtered = Object.entries(allActivities);
+    // Filter by category
+    if (filterCategory && filterCategory.value) {
+      filtered = filtered.filter(([_, details]) => details.category === filterCategory.value);
+    }
+    // Search
+    if (searchActivities && searchActivities.value) {
+      const q = searchActivities.value.toLowerCase();
+      filtered = filtered.filter(([name, details]) =>
+        name.toLowerCase().includes(q) || (details.description && details.description.toLowerCase().includes(q))
+      );
+    }
+    // Sort
+    if (sortActivities && sortActivities.value === "name") {
+      filtered.sort((a, b) => a[0].localeCompare(b[0]));
+    } else if (sortActivities && sortActivities.value === "date") {
+      filtered.sort((a, b) => {
+        const d1 = a[1].date || "";
+        const d2 = b[1].date || "";
+        return d1.localeCompare(d2);
+      });
+    }
+    activitiesList.innerHTML = "";
+    activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
+    if (filtered.length === 0) {
+      activitiesList.innerHTML = "<p>No activities found.</p>";
+      return;
+    }
+    filtered.forEach(([name, details]) => {
+      const activityCard = document.createElement("div");
+      activityCard.className = "activity-card";
+      const spotsLeft = details.max_participants - details.participants.length;
+      const participantsHTML =
+        details.participants.length > 0
+          ? `<div class="participants-section">
               <h5>Participants:</h5>
               <ul class="participants-list">
                 ${details.participants
@@ -35,37 +86,32 @@ document.addEventListener("DOMContentLoaded", () => {
                   .join("")}
               </ul>
             </div>`
-            : `<p><em>No participants yet</em></p>`;
-
-        activityCard.innerHTML = `
-          <h4>${name}</h4>
-          <p>${details.description}</p>
-          <p><strong>Schedule:</strong> ${details.schedule}</p>
-          <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
-          <div class="participants-container">
-            ${participantsHTML}
-          </div>
-        `;
-
-        activitiesList.appendChild(activityCard);
-
-        // Add option to select dropdown
-        const option = document.createElement("option");
-        option.value = name;
-        option.textContent = name;
-        activitySelect.appendChild(option);
-      });
-
-      // Add event listeners to delete buttons
-      document.querySelectorAll(".delete-btn").forEach((button) => {
-        button.addEventListener("click", handleUnregister);
-      });
-    } catch (error) {
-      activitiesList.innerHTML =
-        "<p>Failed to load activities. Please try again later.</p>";
-      console.error("Error fetching activities:", error);
-    }
+          : `<p><em>No participants yet</em></p>`;
+      activityCard.innerHTML = `
+        <h4>${name}</h4>
+        <p>${details.description}</p>
+        <p><strong>Schedule:</strong> ${details.schedule}</p>
+        <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+        <div class="participants-container">
+          ${participantsHTML}
+        </div>
+      `;
+      activitiesList.appendChild(activityCard);
+      // Add option to select dropdown
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      activitySelect.appendChild(option);
+    });
+    // Add event listeners to delete buttons
+    document.querySelectorAll(".delete-btn").forEach((button) => {
+      button.addEventListener("click", handleUnregister);
+    });
   }
+
+  if (filterCategory) filterCategory.addEventListener("change", renderActivities);
+  if (sortActivities) sortActivities.addEventListener("change", renderActivities);
+  if (searchActivities) searchActivities.addEventListener("input", renderActivities);
 
   // Handle unregister functionality
   async function handleUnregister(event) {
